@@ -1,0 +1,161 @@
+#compdef prosv5
+
+(( $+functions[_list_targets] )) ||
+_list_targets() {
+	local -a _targets
+	_targets=('v5' 'cortex')
+	_describe "targets" _targets
+}
+
+(( $+functions[_list_backends] )) ||
+_list_backends() {
+	local -a _backends
+	_backends=('share' 'solo')
+	_describe "backends" _backends
+}
+
+(( $+functions[_list_log_level] )) ||
+_list_log_level() {
+	local -a _levels
+	_levels=(
+		'DEBUG'
+		'INFO'
+		'WARNING'
+		'ERROR'
+		'CRITICAL'
+	)
+	_describe "log levels" _levels
+}
+
+(( $+functions[_prosv5_conductor] )) ||
+_prosv5_conductor() {
+	local -a _conductor_cmds
+	_conductor_cmds=(
+		'apply:Upgrade or install a template'
+		'create-template:Create a template to be used in other'
+		'fetch:Fetch/Download a remote template'
+		'info-project:Display information about a PROS project'
+		'install:Install a library into a PROS project'
+		'new-project:Create a new PROS project'
+		'purge-template:Purge template(s) from the local cache'
+		'query-templates:Query local and remote templates'
+		'uninstall:Uninstall a template from a PROS project'
+		'upgrade:Upgrade a PROS project'
+	)
+
+	_describe "conductor command" _conductor_cmds
+
+	_arguments -s \
+		'--help[Show help message and exit]'
+}
+
+(( $+functions[_prosv5_lsusb] )) ||
+_prosv5_lsusb() {
+	_arguments -s \
+		'--target:targets:_list_targets' \
+		'--help[Show help message and exit]'
+}
+
+(( $+functions[_prosv5_make] )) ||
+_prosv5_make() {
+	_arguments -s \
+		'--project[PROS Project directory or file. default: .]:directories:_directories' \
+		'--help[Show help message and exit]'
+}
+
+(( $+functions[_prosv5_terminal] )) ||
+_prosv5_terminal() {
+	_arguments -s \
+		'--backend[Backend port of the terminal]:backends:_list_backends' \
+		'--raw[Do not process the data]' \
+		'--hex[Display data as hexadecimal values. Unaffected by --raw]' \
+		'--ports[Specify 2 ports for the "share" backend. The default option deterministically selects ports based on the serial port name]: Specify ports' \
+		'--banner[Display banner]' \
+		'--no-banner[Do not display banner]' \
+		'--help[Show help message and exit]'
+}
+
+(( $+functions[_prosv5_upgrade] )) ||
+_prosv5_upgrade() {
+	_arguments -s \
+		'--force-check[Force check for updates, disregarding auto-check frequency]' \
+		'--no-install[Only check if a new version is available, do not attempt to]' \
+		'--help[Show help message and exit]'
+}
+
+(( $+functions[_prosv5_upload] )) ||
+_prosv5_upload() {
+	_arguments -s \
+		'--compress-bin[Compress the program binary before uploading]' \
+		'--execute[Execute program after uploading]' \
+		'--name[Remote program name]:Specify a name' \
+		'--no-compress-bin[Do not compress the program binary before uploading]' \
+		'--no-run-after[Do not immediately run the uploaded program]' \
+		'--project[PROS Project directory or file. default: .]:directories:_directories' \
+		'--run-after[Immediately run the uploaded program]' \
+		'--run-screen[Open "run program" screen after uploading]' \
+		'--slot[Program slot on the GUI. default: 1]:Specify a slot' \
+		'--target[Specify the target microcontroller]:targets:_list_targets' \
+		{-q,--quirk}':Specify an integer' \
+		'--help[Show help message and exit]'
+}
+
+(( $+functions[_prosv5_v5] )) ||
+_prosv5_v5() {
+	local -a _v5_cmds
+	_v5_cmds=(
+		'capture:Take a screen capture of the display'
+		'cat-metadata:Print metadata for a file'
+		'ls-files:List files on the flash filesystem'
+		'rm-all:Remove all user programs from the V5'
+		'rm-file:Remove a file from the flash filesystem'
+		'run:Run a V5 Program'
+		'status:Print system information for the V5'
+		'stop:Stop a V5 Program'
+	)
+
+	_describe "v5 commands" _v5_cmds
+
+	_arguments -s \
+		'--help[Show help message and exit]'
+}
+
+(( $+functions[_prosv5_commands] )) ||
+_prosv5_commands() {
+	local -a _cmds
+	_cmds=(
+		'conductor:Perform project management for PROS'
+		'lsusb:List plugged in VEX Devices'
+		'make:Build current PROS project or cwd'
+		'terminal:Open a terminal to a serial port'
+		'test'
+		'upgrade:Check for updates to the PROS CLI'
+		'upload:Upload a binary to a microcontroller.'
+		'v5:Utilities for managing the VEX V5'
+	)
+
+	if (( CURRENT == 1 )); then
+		_describe "command" _cmds || compadd "$@"
+	else
+		local curcontext="$curcontext" _ignore
+
+		cmd="${${_cmds[(r)$words[1]:*]%%:*}}"
+
+		if (( $#cmd )); then
+			curcontext="${curcontext%:*:*}:prosv5-${cmd}:"
+
+			_call_function ret _prosv5_$cmd || _message 'no more arguments'
+		else
+			_message "unknown prosv5 command: $words[1]"
+		fi
+		return ret
+	fi
+}
+
+_arguments -s \
+	'--debug[Enable debugging output]' \
+	'--logfile[Log message to a file]:Specify path' \
+	'--verbose[Enable verbose output]' \
+	'--version[Display version and exits]' \
+	{-l,--log}'[Specify log level]:log levels:_list_log_level' \
+	'*::prosv5 command:_prosv5_commands'

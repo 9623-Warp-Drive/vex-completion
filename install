@@ -1,0 +1,15 @@
+#!/bin/sh
+
+[ "$(id -u)" -eq 0 ] || {
+	echo 'please run as root' 1>&2
+	exit 1
+}
+
+REPO=$(dirname "$0")
+
+[ -d "/usr/share/zsh/site-functions" ] || {
+	echo '/usr/share/zsh/site-functions: not found' 1>&2
+	exit 2
+}
+
+cp "$REPO/zsh/_prosv5" /usr/share/zsh/site-functions/

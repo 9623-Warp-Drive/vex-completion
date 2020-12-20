@@ -27,6 +27,40 @@ _list_log_level() {
 	_describe "log levels" _levels
 }
 
+(( $+functions[_list_icons] )) ||
+_list_icons() {
+	local -a _icons
+	_icons=(
+		'USER000x.bmp:VEX'
+		'USER001x.bmp:Cool Looking X'
+		'USER003x.bmp:Slice of Pizza'
+		'USER010x.bmp:Clawbot'
+		'USER011x.bmp:Robot Head'
+		'USER012x.bmp:Power Icon'
+		'USER013x.bmp:Planet with Moons'
+		'USER027x.bmp:Alien'
+		'USER029x.bmp:UFO'
+		'USER901x.bmp:MATLAB'
+		'USER902x.bmp:PROS'
+		'USER903x.bmp:Robot Mesh Studio (ver 1)'
+		'USER910x.bmp:Robot Mesh Studio (ver 2)'
+		'USER911x.bmp:Robot Mesh Studio C++ logo'
+		'USER912x.bmp:Robot Mesh Studio Blockly'
+		'USER913x.bmp:Robot Mesh Studio Flowol'
+		'USER914x.bmp:Robot Mesh Studio JavaScript'
+		'USER915x.bmp:Robot Mesh Studio Python'
+		'USER920x.bmp:Default File (ver 1)'
+		'USER921x.bmp:VexCode'
+		'USER922x.bmp:VexCode Blocks'
+		'USER923x.bmp:Default File (ver 2)'
+		'USER924x.bmp:Default File (ver 3)'
+		'USER925x.bmp:VexCode Python'
+		'USER926x.bmp:VexCode C++'
+		'USER999x.bmp:Default File (ver 4)'
+	)
+	_describe "program icons" _icons
+}
+
 (( $+functions[_prosv5_conductor] )) ||
 _prosv5_conductor() {
 	local -a _conductor_cmds
@@ -95,6 +129,7 @@ _prosv5_upload() {
 		'--run-after[Immediately run the uploaded program]' \
 		'--run-screen[Open "run program" screen after uploading]' \
 		'--slot[Program slot on the GUI. default: 1]:Specify a slot' \
+		'--icon[Program icon on the GUI. default: 902]:program icons:_list_icons' \
 		'--target[Specify the target microcontroller]:targets:_list_targets' \
 		{-q,--quirk}':Specify an integer' \
 		'--help[Show help message and exit]'

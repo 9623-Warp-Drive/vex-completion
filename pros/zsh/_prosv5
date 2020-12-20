@@ -1,5 +1,8 @@
 #compdef prosv5
 
+# (c) Khue Nguyen <Z5483Y@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-only
+
 (( $+functions[_list_targets] )) ||
 _list_targets() {
 	local -a _targets
@@ -31,7 +34,7 @@ _list_log_level() {
 _list_icons() {
 	local -a _icons
 	_icons=(
-		'USER000x.bmp:VEX'
+		'USER000x.bmp:VCS'
 		'USER001x.bmp:Cool Looking X'
 		'USER003x.bmp:Slice of Pizza'
 		'USER010x.bmp:Clawbot'

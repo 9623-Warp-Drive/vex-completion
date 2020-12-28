@@ -1,20 +1,13 @@
-#compdef prosv5
+#compdef _prosv5 prosv5
 
 # (c) Khue Nguyen <Z5483Y@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
-
-(( $+functions[_list_targets] )) ||
-_list_targets() {
-	local -a _targets
-	_targets=('v5' 'cortex')
-	_describe "targets" _targets
-}
 
 (( $+functions[_list_backends] )) ||
 _list_backends() {
 	local -a _backends
 	_backends=('share' 'solo')
-	_describe "backends" _backends
+	_describe "backend" _backends
 }
 
 (( $+functions[_list_log_level] )) ||
@@ -27,7 +20,7 @@ _list_log_level() {
 		'ERROR'
 		'CRITICAL'
 	)
-	_describe "log levels" _levels
+	_describe "level" _levels
 }
 
 (( $+functions[_list_icons] )) ||
@@ -61,139 +54,578 @@ _list_icons() {
 		'USER926x.bmp:VexCode C++'
 		'USER999x.bmp:Default File (ver 4)'
 	)
-	_describe "program icons" _icons
+	_describe "icon" _icons
+}
+
+(( $+functions[_list_targets] )) ||
+_list_targets() {
+	local -a _targets
+	_targets=('v5' 'cortex')
+	_describe "target" _targets
+}
+
+(( $+functions[_list_templates] )) ||
+_list_templates() {
+	local -a _list_templates
+	_templates=($(ls -1 $XDG_CONFIG_HOME/pros/templates))
+	_describe "template" _templates
+}
+
+_prosv5() {
+	_arguments -C \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--version[Display version and exits]' \
+		'--help[Show help message and exit]' \
+		"1: :->commands" \
+		"*::arg:->args"
+
+	local -a _cmds
+	case "$state" in
+	commands)
+		_cmds=(
+			'conductor:Perform project management for PROS'
+			'lsusb:List plugged in VEX Devices'
+			'make:Build current PROS project or cwd'
+			'terminal:Open a terminal to a serial port'
+			'test'
+			'upgrade:Check for updates to the PROS CLI'
+			'upload:Upload a binary to a microcontroller.'
+			'v5:Utilities for managing the VEX V5'
+		)
+		_describe "command" _cmds
+		;;
+	esac
+
+	case "$words[1]" in
+	conductor)
+		_prosv5_conductor ;;
+	lsusb)
+		_prosv5_lsusb ;;
+	make)
+		_prosv5_make ;;
+	terminal)
+		_prosv5_terminal ;;
+	test)
+		_prosv5_test ;;
+	upgrade)
+		_prosv5_upgrade ;;
+	upload)
+		_prosv5_upload ;;
+	v5)
+		_prosv5_v5 ;;
+	esac
 }
 
 (( $+functions[_prosv5_conductor] )) ||
 _prosv5_conductor() {
+	_arguments -C \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->commands" \
+		"*::arg:->args"
+
 	local -a _conductor_cmds
-	_conductor_cmds=(
-		'apply:Upgrade or install a template'
-		'create-template:Create a template to be used in other'
-		'fetch:Fetch/Download a remote template'
-		'info-project:Display information about a PROS project'
-		'install:Install a library into a PROS project'
-		'new-project:Create a new PROS project'
-		'purge-template:Purge template(s) from the local cache'
-		'query-templates:Query local and remote templates'
-		'uninstall:Uninstall a template from a PROS project'
-		'upgrade:Upgrade a PROS project'
-	)
+	case "$state" in
+	commands)
+		_conductor_cmds=(
+			'apply:Upgrade or install a template'
+			'create-template:Create a template to be used in other'
+			'fetch:Fetch/Download a remote template'
+			'info-project:Display information about a PROS project'
+			'install:Install a library into a PROS project'
+			'new-project:Create a new PROS project'
+			'purge-template:Purge template(s) from the local cache'
+			'query-templates:Query local and remote templates'
+			'uninstall:Uninstall a template from a PROS project'
+			'upgrade:Upgrade a PROS project'
+		)
+		_describe "conductor command" _conductor_cmds
+		;;
+	esac
 
-	_describe "conductor command" _conductor_cmds
+	case "$words[1]" in
+	apply)
+		_prosv5_conductor_apply ;;
+	create-template)
+		_prosv5_conductor_create_template ;;
+	fetch)
+		_prosv5_conductor_fetch ;;
+	info-project)
+		_prosv5_conductor_info_project ;;
+	install)
+		_prosv5_conductor_install ;;
+	new-project)
+		_prosv5_conductor_new_project ;;
+	purge-template)
+		_prosv5_conductor_purge_template ;;
+	query-templates)
+		_prosv5_conductor_query_templates ;;
+	uninstall)
+		_prosv5_conductor_uninstall ;;
+	upgrade)
+		_prosv5_conductor_upgrade ;;
+	esac
+}
 
-	_arguments -s \
+(( $+functions[_prosv5_conductor_apply] )) ||
+_prosv5_conductor_apply() {
+	_arguments -C \
+		'--upgrade[Allow upgrading templates in a project]' \
+		'--no--upgrade[Forbid upgrading templates in a project]' \
+		'--install[Allow installing templates in a project]' \
+		'--no-install[Forbid installing templates in a project]' \
+		'--download[Allow downloading templates]' \
+		'--no-download[Forbid downloading templates]' \
+		'--upgrade-user-files[Replace all user files in a template]' \
+		'--no-upgrade-user-files[Do not replace all user files in a template]' \
+		'--force[Force all system files to be inserted into the project]' \
+		'--force-apply[Force apply the template]' \
+		'--remove-empty-dirs[Remove empty directories when removing files]' \
+		'--no-remove-empty-dirs[Do not remove empty directories when removing files]' \
+		'--project[PROS Project directory or file]:project:_files' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->templates" \
+		"*::arg:->args"
+
+	case "$state" in
+	templates)
+		_list_templates ;;
+	esac
+}
+
+(( $+functions[_prosv5_conductor_create_template] )) ||
+_prosv5_conductor_create_template() {
+	_arguments -C \
+		'--system[Specify system files required by the template]:file:_files' \
+		'--user[Specify files that are intended to be modified by users]:file:_files' \
+		'--kernels[Specify supported kernels]:version' \
+		'--targets[Specify the target platform]:platform:_list_targets' \
+		'--destination[Specify an alternate destination for the created ZIP file or template descriptor]:destination:_files' \
+		'--zip[Create a ZIP file or create a template descriptor]' \
+		'--no-zip[Do not create a ZIP file or create a template descriptor]' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->directories" \
+		"2: :->versions" \
+		"*::arg:->args"
+	
+	case "$state" in
+	directories)
+		_directories ;;
+	versions)
+		_message 'version';;
+	esac
+}
+
+(( $+functions[_prosv5_conductor_fetch] )) ||
+_prosv5_conductor_fetch() {
+	_arguments -C \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->files" \
+		"*::arg:->args"
+
+	case "$state" in
+	files)
+		_files ;;
+	esac
+}
+
+(( $+functions[_prosv5_conductor_info_project] )) ||
+_prosv5_conductor_info_project() {
+	_arguments \
+		'--ls-upgrades' \
+		'--no-ls-upgrades' \
+		'--project[PROS Project directory or file]:directory:_directories' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
 		'--help[Show help message and exit]'
+}
+
+(( $+functions[_prosv5_conductor_install] )) ||
+_prosv5_conductor_install() {
+	_arguments -C \
+		{--upgrade,--no-upgrade} \
+		{--download,--no-download} \
+		'--force-user[Replace all user files in a template]' \
+		{-f,--force-system}'[Force all system files to be inserted into the project]' \
+		'--force-apply[Force apply the template]' \
+		'--remove-empty-dirs[Remove empty directories when removing files]' \
+		'--no-remove-empty-dirs[Do not remove empty directories when removing files]' \
+		'--project[PROS Project directory or file]:directory:_directories' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->templates" \
+		"*::arg:->args"
+
+	case "$state" in
+	templates)
+		_list_templates ;;
+	esac
+}
+
+(( $+functions[_prosv5_conductor_new_project] )) ||
+_prosv5_conductor_new_project() {
+	_arguments -C \
+		'--force-user[Replace all user files in a template]' \
+		{-f,--force-system}'[Force all system files to be inserted into the project]' \
+		'--force-refresh[Force update all remote depos]' \
+		'--no-default-libs[Do not intsall any default libraries]' \
+		'--compile-after[Compile the project after creation]' \
+		'--build-cache[Build compile commands cache after creation]' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->paths" \
+		"2: :->targets" \
+		"3: :->versions" \
+		"*::arg:->args"
+
+	case "$state" in
+	paths)
+		_directories ;;
+	targets)
+		_list_targets ;;
+	versions)
+		_message 'version' ;;
+	esac
+}
+
+(( $+functions[_prosv5_conductor_purge_template] )) ||
+_prosv5_conductor_purge_template() {
+	_arguments -C \
+		{-f,--force}'[Do not prompt for removal of multiple templates]' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->templates" \
+		"*::arg:->args"
+
+	case "$state" in
+	templates)
+		_list_templates ;;
+	esac
+}
+
+(( $+functions[_prosv5_conductor_query_template] )) ||
+_prosv5_conductor_query_templates() {
+	_arguments \
+		'--allow-offline[Allow offline template in the listing]' \
+		'--no-offline[Disallow offline template in the listing]' \
+		'--allow-onling[Allow onling template in the listing]' \
+		'--no-onling[Disallow onling template in the listing]' \
+		'--force-refresh[Force update all remote depos]' \
+		'--limit[Limit displayed results]:integer' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+}
+
+(( $+functions[_prosv5_conductor_uninstall] )) ||
+_prosv5_conductor_uninstall() {
+	_arguments -C \
+		'--remove-user[Also remove user files]' \
+		'--remove-empty-dirs[Remove empty directories when removing files]' \
+		'--no-remove-empty-dirs[Do not remove empty directories when removing files]' \
+		'--project[PROS Project directory or file]:project:_files' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->templates" \
+		"*::arg:->args"
+
+	case "$state" in
+	templates)
+		_list_templates ;;
+	esac
+}
+
+(( $+functions[_prosv5_conductor_upgrade] )) ||
+_prosv5_conductor_upgrade() {
+	_arguments -C \
+		'--install[Allow installing templates in a project]' \
+		'--no-install[Forbid installing templates in a project]' \
+		'--download[Allow downloading templates]' \
+		'--no-download[Forbid downloading templates]' \
+		'--force-user[Replace all user files in a template]' \
+		{-f,--force}'[Force all system files to be inserted into the project]' \
+		'--force-apply[Force apply the template]' \
+		'--remove-empty-dirs[Remove empty directories when removing files]' \
+		'--no-remove-empty-dirs[Do not remove empty directories when removing files]' \
+		'--project[PROS Project directory or file]:project:_files' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->templates" \
+		"*::arg:->args"
+
+	case "$state" in
+	templates)
+		_list_templates ;;
+	esac
 }
 
 (( $+functions[_prosv5_lsusb] )) ||
 _prosv5_lsusb() {
-	_arguments -s \
-		'--target:targets:_list_targets' \
+	_arguments \
+		'--target:target:_list_targets' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
 		'--help[Show help message and exit]'
 }
 
 (( $+functions[_prosv5_make] )) ||
 _prosv5_make() {
-	_arguments -s \
-		'--project[PROS Project directory or file. default: .]:directories:_directories' \
+	_arguments \
+		'--project[PROS Project directory or file]:project:_files' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
 		'--help[Show help message and exit]'
 }
 
 (( $+functions[_prosv5_terminal] )) ||
 _prosv5_terminal() {
-	_arguments -s \
+	_arguments \
 		'--backend[Backend port of the terminal]:backends:_list_backends' \
 		'--raw[Do not process the data]' \
 		'--hex[Display data as hexadecimal values. Unaffected by --raw]' \
-		'--ports[Specify 2 ports for the "share" backend. The default option deterministically selects ports based on the serial port name]: Specify ports' \
+		'--ports[Specify 2 ports for the "share" backend. The default option deterministically selects ports based on the serial port name]' \
 		'--banner[Display banner]' \
 		'--no-banner[Do not display banner]' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
 		'--help[Show help message and exit]'
 }
 
 (( $+functions[_prosv5_upgrade] )) ||
 _prosv5_upgrade() {
-	_arguments -s \
+	_arguments \
 		'--force-check[Force check for updates, disregarding auto-check frequency]' \
 		'--no-install[Only check if a new version is available, do not attempt to]' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
 		'--help[Show help message and exit]'
 }
 
 (( $+functions[_prosv5_upload] )) ||
 _prosv5_upload() {
-	_arguments -s \
-		'--compress-bin[Compress the program binary before uploading]' \
-		'--execute[Execute program after uploading]' \
-		'--name[Remote program name]:Specify a name' \
-		'--no-compress-bin[Do not compress the program binary before uploading]' \
-		'--no-run-after[Do not immediately run the uploaded program]' \
-		'--project[PROS Project directory or file. default: .]:directories:_directories' \
+	_arguments \
+		'--target[Specify the target microcontroller]:target:_list_targets' \
+		'--project[PROS Project directory or file]:project:_files' \
 		'--run-after[Immediately run the uploaded program]' \
-		'--run-screen[Open "run program" screen after uploading]' \
-		'--slot[Program slot on the GUI. default: 1]:Specify a slot' \
-		'--icon[Program icon on the GUI. default: 902]:program icons:_list_icons' \
-		'--target[Specify the target microcontroller]:targets:_list_targets' \
+		'--no-run-after[Do not immediately run the uploaded program]' \
 		{-q,--quirk}':Specify an integer' \
+		'--name[Remote program name]:name' \
+		'--slot[Program slot on the GUI]:slot' \
+		'--run-screen[Open "run program" screen after uploading]' \
+		'--execute[Execute program after uploading]' \
+		'--compress-bin[Compress the program binary before uploading]' \
+		'--no-compress-bin[Do not compress the program binary before uploading]' \
+		'--icon[Program icon on the GUI]:icon:_list_icons' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
 		'--help[Show help message and exit]'
 }
 
 (( $+functions[_prosv5_v5] )) ||
 _prosv5_v5() {
+	_arguments -C \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->commands" \
+		"*::arg:->args"
+
 	local -a _v5_cmds
-	_v5_cmds=(
-		'capture:Take a screen capture of the display'
-		'cat-metadata:Print metadata for a file'
-		'ls-files:List files on the flash filesystem'
-		'rm-all:Remove all user programs from the V5'
-		'rm-file:Remove a file from the flash filesystem'
-		'run:Run a V5 Program'
-		'status:Print system information for the V5'
-		'stop:Stop a V5 Program'
-	)
+	case "$state" in
+	commands)
+		_v5_cmds=(
+			'capture:Take a screen capture of the display'
+			'cat-metadata:Print metadata for a file'
+			'ls-files:List files on the flash filesystem'
+			'rm-all:Remove all user programs from the V5'
+			'rm-file:Remove a file from the flash filesystem'
+			'run:Run a V5 Program'
+			'status:Print system information for the V5'
+			'stop:Stop a V5 Program'
+		)
+		_describe "v5 commands" _v5_cmds
+		;;
+	esac
 
-	_describe "v5 commands" _v5_cmds
-
-	_arguments -s \
-		'--help[Show help message and exit]'
+	case "$words[1]" in
+	capture)
+		_prosv5_v5_capture ;;
+	cat-metadata|ls-files)
+		_prosv5_v5_generic ;;
+	rm-all)
+		_prosv5_v5_rm_all ;;
+	rm-file)
+		_prosv5_v5_rm_file ;;
+	run)
+		_prosv5_v5_run ;;
+	stop|status)
+		_prosv5_v5_stop_status ;;
+	esac
 }
 
-(( $+functions[_prosv5_commands] )) ||
-_prosv5_commands() {
-	local -a _cmds
-	_cmds=(
-		'conductor:Perform project management for PROS'
-		'lsusb:List plugged in VEX Devices'
-		'make:Build current PROS project or cwd'
-		'terminal:Open a terminal to a serial port'
-		'test'
-		'upgrade:Check for updates to the PROS CLI'
-		'upload:Upload a binary to a microcontroller.'
-		'v5:Utilities for managing the VEX V5'
-	)
+(( $+functions[_prosv5_v5_capture] )) ||
+_prosv5_v5_capture() {
+	_arguments -C \
+		'--force' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->filename" \
+		"2: :->port" \
+		"*::arg:->args"
 
-	if (( CURRENT == 1 )); then
-		_describe "command" _cmds || compadd "$@"
-	else
-		local curcontext="$curcontext" _ignore
-
-		cmd="${${_cmds[(r)$words[1]:*]%%:*}}"
-
-		if (( $#cmd )); then
-			curcontext="${curcontext%:*:*}:prosv5-${cmd}:"
-
-			_call_function ret _prosv5_$cmd || _message 'no more arguments'
-		else
-			_message "unknown prosv5 command: $words[1]"
-		fi
-		return ret
-	fi
+	case "$state" in
+	filename)
+		_files ;;
+	port)
+		_message 'port' ;;
+	esac
 }
 
-_arguments -s \
-	'--debug[Enable debugging output]' \
-	'--logfile[Log message to a file]:Specify path' \
-	'--verbose[Enable verbose output]' \
-	'--version[Display version and exits]' \
-	{-l,--log}'[Specify log level]:log levels:_list_log_level' \
-	'*::prosv5 command:_prosv5_commands'
+(( $+functions[_prosv5_v5_generic] )) ||
+_prosv5_v5_generic() {
+	_arguments -C \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->filename" \
+		"2: :->port" \
+		"*::arg:->args"
+
+	case "$state" in
+	filename)
+		_files ;;
+	port)
+		_message 'port' ;;
+	esac
+}
+
+(( $+functions[_prosv5_v5_rm_all] )) ||
+_prosv5_v5_rm_all() {
+	_arguments -C \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->port" \
+		"*::arg:->args"
+
+	case "$state" in
+	port)
+		_message 'port' ;;
+	esac
+}
+
+(( $+functions[_prosv5_v5_rm_file] )) ||
+_prosv5_v5_rm_file() {
+	_arguments -C \
+		'--erase-all[Erase all files matching base name]' \
+		'--erase-only[Only file matching base name]' \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->filename" \
+		"2: :->port" \
+		"*::arg:->args"
+
+	case "$state" in
+	filename)
+		_files ;;
+	port)
+		_message 'port' ;;
+	esac
+}
+
+
+(( $+functions[_prosv5_v5_run] )) ||
+_prosv5_v5_run() {
+	_arguments -C \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->slot" \
+		"2: :->port" \
+		"*::arg:->args"
+
+	case "$state" in
+	slot)
+		_message 'slot' ;;
+	port)
+		_message 'port' ;;
+	esac
+}
+
+(( $+functions[_prosv5_v5_stop_status] )) ||
+_prosv5_v5_stop_status() {
+	_arguments -C \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->port" \
+		"*::arg:->args"
+
+	case "$state" in
+	port)
+		_message 'port' ;;
+	esac
+}

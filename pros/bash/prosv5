@@ -1,0 +1,1256 @@
+#!/usr/bin/env bash
+# (c) Khue Nguyen <Z5483Y@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-only
+
+__prosv5_debug() {
+	if [[ -n ${BASH_COMP_DEBUG_FILE} ]]; then
+		echo "$*" >> "${BASH_COMP_DEBUG_FILE}"
+	fi
+}
+
+__prosv5_init_completion() {
+	COMPREPLY=()
+	_get_comp_words_by_ref "$@" cur prev words cword
+}
+
+__prosv5_index_of_word() {
+	local w word=$1
+	shift
+	index=0
+	for w in "$@"; do
+		[[ $w = "$word" ]] && return
+		index=$((index+1))
+	done
+	index=-1
+}
+
+__prosv5_contains_word() {
+	local w word=$1; shift
+	for w in "$@"; do
+		[[ $w = "$word" ]] && return
+	done
+	return 1
+}
+
+__prosv5_handle_go_custom_completion() {
+	__prosv5_debug "${FUNCNAME[0]}: cur is ${cur}, words[*] is ${words[*]}, #words[@] is ${#words[@]}"
+
+	local shellCompDirectiveError=1
+	local shellCompDirectiveNoSpace=2
+	local shellCompDirectiveNoFileComp=4
+	local shellCompDirectiveFilterFileExt=8
+	local shellCompDirectiveFilterDirs=16
+
+	local out requestComp lastParam lastChar comp directive args
+
+	args=("${words[@]:1}")
+	requestComp="${words[0]} __completeNoDesc ${args[*]}"
+
+	lastParam=${words[$((${#words[@]}-1))]}
+	lastChar=${lastParam:$((${#lastParam}-1)):1}
+	__prosv5_debug "${FUNCNAME[0]}: lastParam ${lastParam}, lastChar ${lastChar}"
+
+	if [ -z "${cur}" ] && [ "${lastChar}" != "=" ]; then
+		__prosv5_debug "${FUNCNAME[0]}: Adding extra empty parameter"
+		requestComp="${requestComp} \"\""
+	fi
+
+	__prosv5_debug "${FUNCNAME[0]}: calling ${requestComp}"
+	out=$(eval "${requestComp}" 2>/dev/null)
+
+	directive=${out##*:}
+	out=${out%:*}
+	if [ "${directive}" = "${out}" ]; then
+		directive=0
+	fi
+	__prosv5_debug "${FUNCNAME[0]}: the completion directive is: ${directive}"
+	__prosv5_debug "${FUNCNAME[0]}: the completions are: ${out[*]}"
+
+	if [ $((directive & shellCompDirectiveError)) -ne 0 ]; then
+		__prosv5_debug "${FUNCNAME[0]}: received error from custom completion go code"
+		return
+	else
+		if [ $((directive & shellCompDirectiveNoSpace)) -ne 0 ]; then
+			if [[ $(type -t compopt) = "builtin" ]]; then
+				__prosv5_debug "${FUNCNAME[0]}: activating no space"
+				compopt -o nospace
+			fi
+		fi
+		if [ $((directive & shellCompDirectiveNoFileComp)) -ne 0 ]; then
+			if [[ $(type -t compopt) = "builtin" ]]; then
+				__prosv5_debug "${FUNCNAME[0]}: activating no file completion"
+				compopt +o default
+			fi
+		fi
+	fi
+
+	if [ $((directive & shellCompDirectiveFilterFileExt)) -ne 0 ]; then
+		local fullFilter filter filteringCmd
+		for filter in ${out[*]}; do
+			fullFilter+="$filter|"
+		done
+
+		filteringCmd="_filedir $fullFilter"
+		__prosv5_debug "File filtering command: $filteringCmd"
+		$filteringCmd
+	elif [ $((directive & shellCompDirectiveFilterDirs)) -ne 0 ]; then
+		local subDir
+		subdir=$(printf "%s" "${out[0]}")
+		if [ -n "$subdir" ]; then
+			__prosv5_debug "Listing directories in $subdir"
+			__prosv5_handle_subdirs_in_dir_flag "$subdir"
+		else
+			__prosv5_debug "Listing directories in ."
+			_filedir -d
+		fi
+	else
+		while IFS='' read -r comp; do
+			COMPREPLY+=("$comp")
+		done < <(compgen -W "${out[*]}" -- "$cur")
+	fi
+}
+
+__prosv5_handle_reply()
+{
+	__prosv5_debug "${FUNCNAME[0]}"
+	local comp
+	case $cur in
+	-*)
+		if [[ $(type -t compopt) = "builtin" ]]; then
+			compopt -o nospace
+		fi
+		local allflags
+		if [ ${#must_have_one_flag[@]} -ne 0 ]; then
+			allflags=("${must_have_one_flag[@]}")
+		else
+			allflags=("${flags[*]} ${two_word_flags[*]}")
+		fi
+		while IFS='' read -r comp; do
+			COMPREPLY+=("$comp")
+		done < <(compgen -W "${allflags[*]}" -- "$cur")
+		if [[ $(type -t compopt) = "builtin" ]]; then
+			[[ "${COMPREPLY[0]}" == *= ]] || compopt +o nospace
+		fi
+
+		if [[ $cur == *=* ]]; then
+			if [[ $(type -t compopt) = "builtin" ]]; then
+				compopt +o nospace
+			fi
+
+			local index flag
+			flag="${cur%=*}"
+			__prosv5_index_of_word "${flag}" "${flags_with_completion[@]}"
+			COMPREPLY=()
+			if [[ ${index} -ge 0 ]]; then
+				PREFIX=""
+				cur="${cur#*=}"
+				${flags_completion[${index}]}
+				if [ -n "${ZSH_VERSION}" ]; then
+					eval "COMPREPLY=( \"\${COMPREPLY[@]/#/${flag}=}\" )"
+				fi
+			fi
+		fi
+		return 0;
+		;;
+	esac
+
+	local index
+	__prosv5_index_of_word "${prev}" "${flags_with_completion[@]}"
+	if [[ ${index} -ge 0 ]]; then
+		${flags_completion[${index}]}
+		return
+	fi
+
+	if [[ ${cur} != "${words[cword]}" ]]; then
+		return
+	fi
+
+	local completions
+	completions=("${commands[@]}")
+	if [[ ${#must_have_one_noun[@]} -ne 0 ]]; then
+		completions+=("${must_have_one_noun[@]}")
+	elif [[ -n "${has_completion_function}" ]]; then
+		__prosv5_handle_go_custom_completion
+	fi
+	if [[ ${#must_have_one_flag[@]} -ne 0 ]]; then
+		completions+=("${must_have_one_flag[@]}")
+	fi
+	while IFS='' read -r comp; do
+		COMPREPLY+=("$comp")
+	done < <(compgen -W "${completions[*]}" -- "$cur")
+
+	if [[ ${#COMPREPLY[@]} -eq 0 && ${#noun_aliases[@]} -gt 0 && ${#must_have_one_noun[@]} -ne 0 ]]; then
+		while IFS='' read -r comp; do
+			COMPREPLY+=("$comp")
+		done < <(compgen -W "${noun_aliases[*]}" -- "$cur")
+	fi
+
+	if [[ ${#COMPREPLY[@]} -eq 0 ]]; then
+		if declare -F __prosv5_custom_func >/dev/null; then
+			__prosv5_custom_func
+		else
+			declare -F __custom_func >/dev/null && __custom_func
+		fi
+	fi
+
+	if declare -F __ltrim_colon_completions >/dev/null; then
+		__ltrim_colon_completions "$cur"
+	fi
+
+	if [[ "${#COMPREPLY[@]}" -eq "1" ]] && [[ $(type -t compopt) = "builtin" ]] && [[ "${COMPREPLY[0]}" == --*= ]]; then
+		compopt -o nospace
+	fi
+}
+
+__prosv5_handle_subdirs_in_dir_flag() {
+	local dir="$1"
+	pushd "${dir}" >/dev/null 2>&1 && _filedir -d && popd >/dev/null 2>&1 || return
+}
+
+__prosv5_handle_flag() {
+	__prosv5_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+
+	local flagname=${words[c]}
+	local flagvalue
+	if [[ ${words[c]} == *"="* ]]; then
+		flagvalue=${flagname#*=}
+		flagname=${flagname%=*}
+		flagname="${flagname}="
+	fi
+	__prosv5_debug "${FUNCNAME[0]}: looking for ${flagname}"
+	if __prosv5_contains_word "${flagname}" "${must_have_one_flag[@]}"; then
+		must_have_one_flag=()
+	fi
+
+	if __prosv5_contains_word "${flagname}" "${local_nonpersistent_flags[@]}"; then
+		commands=()
+	fi
+
+	if [[ -z "${BASH_VERSION}" || "${BASH_VERSINFO[0]}" -gt 3 ]]; then
+		if [ -n "${flagvalue}" ] ; then
+			flaghash[${flagname}]=${flagvalue}
+		elif [ -n "${words[ $((c+1)) ]}" ] ; then
+			flaghash[${flagname}]=${words[ $((c+1)) ]}
+		else
+			flaghash[${flagname}]="true"
+		fi
+	fi
+
+	if [[ ${words[c]} != *"="* ]] && __prosv5_contains_word "${words[c]}" "${two_word_flags[@]}"; then
+		__prosv5_debug "${FUNCNAME[0]}: found a flag ${words[c]}, skip the next argument"
+		c=$((c+1))
+		if [[ $c -eq $cword ]]; then
+			commands=()
+		fi
+	fi
+
+	c=$((c+1))
+
+}
+
+__prosv5_handle_noun() {
+	__prosv5_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+
+	if __prosv5_contains_word "${words[c]}" "${must_have_one_noun[@]}"; then
+		must_have_one_noun=()
+	elif __prosv5_contains_word "${words[c]}" "${noun_aliases[@]}"; then
+		must_have_one_noun=()
+	fi
+
+	nouns+=("${words[c]}")
+	c=$((c+1))
+}
+
+__prosv5_handle_command() {
+	__prosv5_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+
+	local next_command
+	if [[ -n ${last_command} ]]; then
+		next_command="_${last_command}_${words[c]//:/__}"
+	else
+		if [[ $c -eq 0 ]]; then
+			next_command="_prosv5_root_command"
+		else
+			next_command="_${words[c]//:/__}"
+		fi
+	fi
+	c=$((c+1))
+	__prosv5_debug "${FUNCNAME[0]}: looking for ${next_command}"
+	declare -F "$next_command" >/dev/null && $next_command
+}
+
+__prosv5_handle_word() {
+	if [[ $c -ge $cword ]]; then
+		__prosv5_handle_reply
+		return
+	fi
+	__prosv5_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+	if [[ "${words[c]}" == -* ]]; then
+		__prosv5_handle_flag
+	elif __prosv5_contains_word "${words[c]}" "${commands[@]}"; then
+		__prosv5_handle_command
+	elif [[ $c -eq 0 ]]; then
+		__prosv5_handle_command
+	elif __prosv5_contains_word "${words[c]}" "${command_aliases[@]}"; then
+		if [[ -z "${BASH_VERSION}" || "${BASH_VERSINFO[0]}" -gt 3 ]]; then
+			words[c]=${aliashash[${words[c]}]}
+			__prosv5_handle_command
+		else
+			__prosv5_handle_noun
+		fi
+	else
+		__prosv5_handle_noun
+	fi
+	__prosv5_handle_word
+}
+
+_prosv5_root_command()
+{
+    last_command="prosv5"
+
+    command_aliases=()
+
+    commands=()
+    commands+=("conductor")
+    commands+=("lsusb")
+    commands+=("make")
+    commands+=("terminal")
+    commands+=("test")
+    commands+=("upgrade")
+    commands+=("upload")
+    commands+=("v5")
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--version")
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+    local_nonpersistent_flags+=("--version")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_prosv5_conductor() {
+	last_command="prosv5_conductor"
+
+	command_aliases=()
+
+	commands=()
+	commands+=("apply")
+	commands+=("create-template")
+	commands+=("fetch")
+	commands+=("info-project")
+	commands+=("install")
+	commands+=("new-project")
+	commands+=("purge-template")
+	commands+=("query-templates")
+	commands+=("uninstall")
+	commands+=("upgrade")
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_conductor_apply() {
+	last_command="prosv5_conductor_apply"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--upgrade")
+	flags+=("--no-upgrade")
+	flags+=("--install")
+	flags+=("--no-install")
+	flags+=("--download")
+	flags+=("--no-download")
+	flags+=("--upgrade-user-files")
+	flags+=("--no-upgrade-user-files")
+	flags+=("--force")
+	flags+=("--force-apply")
+	flags+=("--remove-empty-dirs")
+	flags+=("--no-remove-empty-dirs")
+	flags+=("--project")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	local_nonpersistent_flags+=("--upgrade")
+	local_nonpersistent_flags+=("--no-upgrade")
+	local_nonpersistent_flags+=("--install")
+	local_nonpersistent_flags+=("--no-install")
+	local_nonpersistent_flags+=("--download")
+	local_nonpersistent_flags+=("--no-download")
+	local_nonpersistent_flags+=("--upgrade-user-files")
+	local_nonpersistent_flags+=("--no-upgrade-user-files")
+	local_nonpersistent_flags+=("--force")
+	local_nonpersistent_flags+=("--force-apply")
+	local_nonpersistent_flags+=("--remove-empty-dirs")
+	local_nonpersistent_flags+=("--no-remove-empty-dirs")
+	local_nonpersistent_flags+=("--project")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_conductor_create-template() {
+	last_command="prosv5_conductor_create-template"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--system")
+	flags+=("--user")
+	flags+=("--kernel")
+	flags+=("--target")
+	flags+=("--destination")
+	flags+=("--zip")
+	flags+=("--no-zip")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	local_nonpersistent_flags+=("--system")
+	local_nonpersistent_flags+=("--user")
+	local_nonpersistent_flags+=("--kernel")
+	local_nonpersistent_flags+=("--target")
+	local_nonpersistent_flags+=("--destination")
+	local_nonpersistent_flags+=("--zip")
+	local_nonpersistent_flags+=("--no-zip")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_conductor_fetch() {
+	last_command="prosv5_conductor_fetch"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_conductor_info-project() {
+	last_command="prosv5_conductor_info-project"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--ls-upgrades")
+	flags+=("--no-ls-upgrades")
+	flags+=("--project")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+	local_nonpersistent_flags+=("--ls-upgrades")
+	local_nonpersistent_flags+=("--no-ls-upgrades")
+	local_nonpersistent_flags+=("--project")
+}
+
+_prosv5_conductor_install() {
+	last_command="prosv5_conductor_install"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--upgrade")
+	flags+=("--no-upgrade")
+	flags+=("--install")
+	flags+=("--no-install")
+	flags+=("--download")
+	flags+=("--no-download")
+	flags+=("--upgrade-user-files")
+	flags+=("--no-upgrade-user-files")
+	flags+=("--force")
+	flags+=("--force-apply")
+	flags+=("--remove-empty-dirs")
+	flags+=("--no-remove-empty-dirs")
+	flags+=("--project")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	local_nonpersistent_flags+=("--upgrade")
+	local_nonpersistent_flags+=("--no-upgrade")
+	local_nonpersistent_flags+=("--install")
+	local_nonpersistent_flags+=("--no-install")
+	local_nonpersistent_flags+=("--download")
+	local_nonpersistent_flags+=("--no-download")
+	local_nonpersistent_flags+=("--upgrade-user-files")
+	local_nonpersistent_flags+=("--no-upgrade-user-files")
+	local_nonpersistent_flags+=("--force")
+	local_nonpersistent_flags+=("--force-apply")
+	local_nonpersistent_flags+=("--remove-empty-dirs")
+	local_nonpersistent_flags+=("--no-remove-empty-dirs")
+	local_nonpersistent_flags+=("--project")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_conductor_new-project() {
+	last_command="prosv5_conductor_new-project"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--force-user")
+	flags+=("--force-system")
+	flags+=("-f")
+	flags+=("--force-refresh")
+	flags+=("--no-default-libs")
+	flags+=("--compile-after")
+	flags+=("--build-cache")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	two_word_flags+=("--force-system")
+	two_word_flags+=("-f")
+	local_nonpersistent_flags+=("--force-user")
+	local_nonpersistent_flags+=("--force-system")
+	local_nonpersistent_flags+=("-f")
+	local_nonpersistent_flags+=("--force-refresh")
+	local_nonpersistent_flags+=("--no-default-libs")
+	local_nonpersistent_flags+=("--compile-after")
+	local_nonpersistent_flags+=("--build-cache")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_conductor_purge-template() {
+	last_command="prosv5_conductor_purge-template"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--force")
+	flags+=("-f")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	two_word_flags+=("--force")
+	two_word_flags+=("-f")
+	local_nonpersistent_flags+=("--force")
+	local_nonpersistent_flags+=("-f")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_conductor_query-project() {
+	last_command="prosv5_conductor_query-project"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--allow-offline")
+	flags+=("--no-offline")
+	flags+=("--allow-online")
+	flags+=("--no-online")
+	flags+=("--force-refresh")
+	flags+=("--limit")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	local_nonpersistent_flags+=("--allow-offline")
+	local_nonpersistent_flags+=("--no-offline")
+	local_nonpersistent_flags+=("--allow-online")
+	local_nonpersistent_flags+=("--no-online")
+	local_nonpersistent_flags+=("--force-refresh")
+	local_nonpersistent_flags+=("--limit")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_conductor_uninstall() {
+	last_command="prosv5_conductor_uninstall"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--remove-user")
+	flags+=("--remove-empty-dirs")
+	flags+=("--no-remove-empty-dirs")
+	flags+=("--project")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	local_nonpersistent_flags+=("--remove-user")
+	local_nonpersistent_flags+=("--remove-empty-dirs")
+	local_nonpersistent_flags+=("--no-remove-empty-dirs")
+	local_nonpersistent_flags+=("--project")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_conductor_upgrade() {
+	last_command="prosv5_conductor_upgrade"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--install")
+	flags+=("--no-install")
+	flags+=("--download")
+	flags+=("--no-download")
+	flags+=("--force-system")
+	flags+=("-f")
+	flags+=("--force-apply")
+	flags+=("--remove-empty-dirs")
+	flags+=("--no-remove-empty-dirs")
+	flags+=("--project")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	two_word_flags+=("--force-system")
+	two_word_flags+=("-f")
+	local_nonpersistent_flags+=("--install")
+	local_nonpersistent_flags+=("--no-install")
+	local_nonpersistent_flags+=("--download")
+	local_nonpersistent_flags+=("--no-download")
+	local_nonpersistent_flags+=("--force-system")
+	local_nonpersistent_flags+=("-f")
+	local_nonpersistent_flags+=("--force-apply")
+	local_nonpersistent_flags+=("--remove-empty-dirs")
+	local_nonpersistent_flags+=("--no-remove-empty-dirs")
+	local_nonpersistent_flags+=("--project")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_lsusb() {
+	last_command="prosv5_lsusb"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--target")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	local_nonpersistent_flags+=("--target")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_make() {
+	last_command="prosv5_make"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--project")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	local_nonpersistent_flags+=("--project")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_terminal() {
+	last_command="prosv5_terminal"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--backend")
+	flags+=("--raw")
+	flags+=("--hex")
+	flags+=("--ports")
+	flags+=("--banner")
+	flags+=("--no-banner")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	local_nonpersistent_flags+=("--backend")
+	local_nonpersistent_flags+=("--raw")
+	local_nonpersistent_flags+=("--hex")
+	local_nonpersistent_flags+=("--ports")
+	local_nonpersistent_flags+=("--banner")
+	local_nonpersistent_flags+=("--no-banner")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_upgrade() {
+	last_command="prosv5_upgrade"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--force-check")
+	flags+=("--no-install")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	local_nonpersistent_flags+=("--force-check")
+	local_nonpersistent_flags+=("--no-install")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_upload() {
+	last_command="prosv5_upload"
+
+	command_aliases=()
+
+	commands=()
+
+	flags=()
+	two_word_flags=()
+	local_nonpersistent_flags=()
+	flags_with_completion=()
+	flags_completion=()
+
+	flags+=("--target")
+	flags+=("--project")
+	flags+=("--run-after")
+	flags+=("--no-run-after")
+	flags+=("--quirk")
+	flags+=("-q")
+	flags+=("--name")
+	flags+=("--slot")
+	flags+=("--run-screen")
+	flags+=("--execute")
+	flags+=("--compress-bin")
+	flags+=("--no-compress-bin")
+	flags+=("--debug")
+	flags+=("--log")
+	flags+=("-l")
+	flags+=("--logfile")
+	flags+=("--help")
+	two_word_flags+=("--log")
+	two_word_flags+=("-l")
+	two_word_flags+=("--quirk")
+	two_word_flags+=("-q")
+	local_nonpersistent_flags+=("--target")
+	local_nonpersistent_flags+=("--project")
+	local_nonpersistent_flags+=("--run-after")
+	local_nonpersistent_flags+=("--no-run-after")
+	local_nonpersistent_flags+=("--quirk")
+	local_nonpersistent_flags+=("-q")
+	local_nonpersistent_flags+=("--name")
+	local_nonpersistent_flags+=("--slot")
+	local_nonpersistent_flags+=("--run-screen")
+	local_nonpersistent_flags+=("--execute")
+	local_nonpersistent_flags+=("--compress-bin")
+
+	must_have_one_flag=()
+	must_have_one_noun=()
+	noun_aliases=()
+}
+
+_prosv5_v5() {
+    last_command="prosv5_v5"
+
+    command_aliases=()
+
+    commands=()
+    commands+=("capture")
+    commands+=("cat-metadata")
+    commands+=("ls-files")
+    commands+=("rm-all")
+    commands+=("rm-file")
+    commands+=("run")
+    commands+=("status")
+    commands+=("stop")
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_prosv5_v5_capture() {
+    last_command="prosv5_v5_capture"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--force")
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+    local_nonpersistent_flags+=("--force")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_prosv5_v5_cat-metadata() {
+    last_command="prosv5_v5_cat-metadata"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_prosv5_v5_ls-files() {
+    last_command="prosv5_v5_ls-files"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_prosv5_v5_rm-all() {
+    last_command="prosv5_v5_rm-all"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_prosv5_v5_rm-file() {
+    last_command="prosv5_v5_rm-file"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--erase-all")
+    flags+=("--erase-only")
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+    local_nonpersistent_flags+=("--erase-all")
+    local_nonpersistent_flags+=("--erase-only")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_prosv5_v5_run() {
+    last_command="prosv5_v5_run"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_prosv5_v5_status() {
+    last_command="prosv5_v5_status"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_prosv5_v5_stop() {
+    last_command="prosv5_v5_stop"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_prosv5_test() {
+    last_command="prosv5_test"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--debug")
+    flags+=("--log")
+    flags+=("-l")
+    flags+=("--logfile")
+    flags+=("--help")
+    two_word_flags+=("--log")
+    two_word_flags+=("-l")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+__start_prosv5()
+{
+    local cur prev words cword
+    declare -A flaghash 2>/dev/null || :
+    declare -A aliashash 2>/dev/null || :
+    if declare -F _init_completion >/dev/null 2>&1; then
+        _init_completion -s || return
+    else
+        __prosv5_init_completion -n "=" || return
+    fi
+
+    local c=0
+    local flags=()
+    local two_word_flags=()
+    local local_nonpersistent_flags=()
+    local flags_with_completion=()
+    local flags_completion=()
+    local commands=("prosv5")
+    local must_have_one_flag=()
+    local must_have_one_noun=()
+    local has_completion_function
+    local last_command
+    local nouns=()
+
+    __prosv5_handle_word
+}
+
+if [[ $(type -t compopt) = "builtin" ]]; then
+	complete -o default -F __start_prosv5 prosv5
+else
+	complete -o default -o nospace -F __start_prosv5 prosv5
+fi

@@ -7,9 +7,34 @@
 
 REPO=$(dirname "$0")
 
-[ -d "/usr/share/zsh/site-functions" ] || {
-	echo '/usr/share/zsh/site-functions: not found' 1>&2
-	exit 2
+[ "$1" ] || {
+	echo 'specify shell (zsh, bash)'
+	exit 1
 }
 
-cp "$REPO/pros/zsh/_prosv5" /usr/share/zsh/site-functions/
+case "$1" in
+zsh)
+	[ -d "/usr/share/zsh/site-functions" ] || {
+		echo '/usr/share/zsh/site-functions: directory not found' 1>&2
+		exit 2
+	}
+
+	cp "$REPO/pros/zsh/_prosv5" /usr/share/zsh/site-functions
+	;;
+bash)
+	[ -d "/usr/share/bash-completion/completions" ] || {
+		echo '/usr/share/bash-completion/completions: directory not found' 1>&2
+		exit 2
+	}
+
+	cp "$REPO/pros/bash/prosv5" /usr/share/bash-completion/completions
+	;;
+'')
+	echo 'specify shell (zsh, bash)'
+	exit 1
+	;;
+*)
+	echo 'invalid shell'
+	exit 1
+	;;
+esac

@@ -29,10 +29,6 @@ bash)
 
 	cp "$REPO/pros/bash/prosv5" /usr/share/bash-completion/completions
 	;;
-'')
-	echo 'specify shell (zsh, bash)'
-	exit 1
-	;;
 *)
 	echo 'invalid shell'
 	exit 1

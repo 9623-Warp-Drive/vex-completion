@@ -498,16 +498,20 @@ _prosv5_v5() {
 	case "$words[1]" in
 	capture)
 		_prosv5_v5_capture ;;
-	cat-metadata|ls-files)
-		_prosv5_v5_generic ;;
+	cat-metadata)
+		_prosv5_v5_cat_metadata ;;
+	ls-files)
+		_prosv5_v5_ls_files ;;
 	rm-all)
 		_prosv5_v5_rm_all ;;
 	rm-file)
 		_prosv5_v5_rm_file ;;
 	run)
 		_prosv5_v5_run ;;
-	stop|status)
-		_prosv5_v5_stop_status ;;
+	stop)
+		_prosv5_v5_stop ;;
+	status)
+		_prosv5_v5_status ;;
 	esac
 }
 
@@ -532,8 +536,8 @@ _prosv5_v5_capture() {
 	esac
 }
 
-(( $+functions[_prosv5_v5_generic] )) ||
-_prosv5_v5_generic() {
+(( $+functions[_prosv5_v5_cat_metadata] )) ||
+_prosv5_v5_cat_metadata() {
 	_arguments -C \
 		'--debug[Enable debugging output]' \
 		{-l,--log}'[Specify log level]:level:_list_log_level' \
@@ -547,6 +551,24 @@ _prosv5_v5_generic() {
 	case "$state" in
 	filename)
 		_files ;;
+	port)
+		_message 'port' ;;
+	esac
+}
+
+(( $+functions[_prosv5_v5_ls_files] )) ||
+_prosv5_v5_ls_files() {
+	_arguments -C \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->filename" \
+		"2: :->port" \
+		"*::arg:->args"
+
+	case "$state" in
 	port)
 		_message 'port' ;;
 	esac
@@ -612,8 +634,25 @@ _prosv5_v5_run() {
 	esac
 }
 
-(( $+functions[_prosv5_v5_stop_status] )) ||
-_prosv5_v5_stop_status() {
+(( $+functions[_prosv5_v5_stop] )) ||
+_prosv5_v5_stop() {
+	_arguments -C \
+		'--debug[Enable debugging output]' \
+		{-l,--log}'[Specify log level]:level:_list_log_level' \
+		'--logfile[Log message to a file]:file:_files' \
+		'--verbose[Enable verbose output]' \
+		'--help[Show help message and exit]' \
+		"1: :->port" \
+		"*::arg:->args"
+
+	case "$state" in
+	port)
+		_message 'port' ;;
+	esac
+}
+
+(( $+functions[_prosv5_v5_status] )) ||
+_prosv5_v5_status() {
 	_arguments -C \
 		'--debug[Enable debugging output]' \
 		{-l,--log}'[Specify log level]:level:_list_log_level' \

@@ -39,7 +39,7 @@ _list_icons() {
 		'USER902x.bmp:PROS'
 		'USER903x.bmp:Robot Mesh Studio (ver 1)'
 		'USER910x.bmp:Robot Mesh Studio (ver 2)'
-		'USER911x.bmp:Robot Mesh Studio C++ logo'
+		'USER911x.bmp:Robot Mesh Studio C++'
 		'USER912x.bmp:Robot Mesh Studio Blockly'
 		'USER913x.bmp:Robot Mesh Studio Flowol'
 		'USER914x.bmp:Robot Mesh Studio JavaScript'
